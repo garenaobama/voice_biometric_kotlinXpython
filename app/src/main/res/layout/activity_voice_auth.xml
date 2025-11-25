@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:gravity="center_horizontal">
+
+        <!-- Header -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Voice Biometric Authentication"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Xác thực bằng giọng nói"
+            android:textSize="16sp"
+            android:textColor="#666"
+            android:layout_marginBottom="32dp" />
+
+        <!-- Buttons -->
+        <Button
+            android:id="@+id/recognizeButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🎤 Nhận Diện Giọng Nói"
+            android:textSize="18sp"
+            android:layout_marginBottom="16dp"
+            android:padding="16dp" />
+
+        <Button
+            android:id="@+id/trainButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="➕ Thêm User Mới"
+            android:textSize="18sp"
+            android:layout_marginBottom="16dp"
+            android:padding="16dp" />
+
+        <Button
+            android:id="@+id/listUsersButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📋 Danh Sách Users"
+            android:textSize="18sp"
+            android:layout_marginBottom="24dp"
+            android:padding="16dp" />
+
+        <!-- Result Display -->
+        <TextView
+            android:id="@+id/resultTextView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Nhấn nút để bắt đầu nhận diện giọng nói"
+            android:textSize="16sp"
+            android:gravity="center"
+            android:padding="16dp"
+            android:background="#f5f5f5"
+            android:layout_marginTop="16dp"
+            android:minHeight="200dp" />
+
+    </LinearLayout>
+
+</ScrollView>
+
