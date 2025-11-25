@@ -9,6 +9,12 @@ pluginManagement {
         }
         mavenCentral()
         gradlePluginPortal()
+        maven {
+            url = uri("https://chaquo.com/maven")
+        }
+    }
+    plugins {
+        id("com.chaquo.python") version "16.1.0"
     }
 }
 dependencyResolutionManagement {
@@ -16,6 +22,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://chaquo.com/maven")
+        }
     }
 }
 

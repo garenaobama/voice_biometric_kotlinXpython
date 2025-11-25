@@ -19,7 +19,7 @@ android {
         
         // Cấu hình Python/Chaquopy
         ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            abiFilters += listOf("arm64-v8a", "x86_64")
         }
     }
 
@@ -44,7 +44,7 @@ android {
 // Cấu hình Python với Chaquopy
 chaquopy {
     defaultConfig {
-        version = "3.9"  // Python 3.9 có nhiều pre-built wheels hơn trong Chaquopy repo
+        version = "3.12"  // Python 3.9 có nhiều pre-built wheels hơn trong Chaquopy repo
         
         pip {
             // Sử dụng versions có sẵn pre-built wheels từ Chaquopy repository
