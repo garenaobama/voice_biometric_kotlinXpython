@@ -44,13 +44,11 @@ android {
 // Cấu hình Python với Chaquopy
 chaquopy {
     defaultConfig {
-        version = "3.12"  // Python 3.9 có nhiều pre-built wheels hơn trong Chaquopy repo
-        
+        version = "3.10"  // change below path to actual path to your system's python 3.10 (must be 3.10)
+        buildPython("C:/Users/Monkey/AppData/Local/Programs/Python/Python310/python.exe")
+
         pip {
-            // Sử dụng versions có sẵn pre-built wheels từ Chaquopy repository
-            // Không chỉ định version cụ thể để pip tự tìm wheel phù hợp từ Chaquopy repo
-            install("numpy")  // Pip sẽ tự tìm wheel phù hợp từ Chaquopy repo
-            install("scipy")  
+            install("scipy")  // Thử cài scipy trước để có OpenBLAS
             install("scikit-learn")
             install("python-speech-features==0.6")
         }

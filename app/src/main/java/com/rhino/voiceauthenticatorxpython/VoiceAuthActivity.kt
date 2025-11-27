@@ -3,9 +3,12 @@ package com.rhino.voiceauthenticatorxpython
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.text.InputType
 import android.widget.Button
+import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -46,8 +49,11 @@ class VoiceAuthActivity : AppCompatActivity() {
         }
         
         trainButton.setOnClickListener {
-            // TODO: Implement training UI
-            Toast.makeText(this, "Tính năng training sẽ được implement sau", Toast.LENGTH_SHORT).show()
+            if (checkPermission()) {
+                showAddUserDialog()
+            } else {
+                requestPermission()
+            }
         }
         
         listUsersButton.setOnClickListener {
@@ -145,6 +151,132 @@ class VoiceAuthActivity : AppCompatActivity() {
     }
     
     /**
+     * Hiển thị dialog để thêm user mới
+     */
+    private fun showAddUserDialog() {
+        val input = EditText(this)
+        input.inputType = InputType.TYPE_CLASS_TEXT
+        input.hint = "Nhập tên user"
+        
+        AlertDialog.Builder(this)
+            .setTitle("Thêm User Mới")
+            .setMessage("Nhập tên user và ghi âm ít nhất 3 lần để train model")
+            .setView(input)
+            .setPositiveButton("Bắt đầu") { _, _ ->
+                val userName = input.text.toString().trim()
+                if (userName.isEmpty()) {
+                    Toast.makeText(this, "Tên user không được để trống", Toast.LENGTH_SHORT).show()
+                } else if (userName == "unknown") {
+                    Toast.makeText(this, "Tên 'unknown' không được phép", Toast.LENGTH_SHORT).show()
+                } else {
+                    startTrainingFlow(userName)
+                }
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+    
+    /**
+     * Bắt đầu quy trình training: ghi âm nhiều lần và train model
+     */
+    private fun startTrainingFlow(userName: String) {
+        val recordings = mutableListOf<String>()
+        val minRecordings = 3
+        var currentRecording = 0
+        
+        trainButton.isEnabled = false
+        resultTextView.text = "Chuẩn bị ghi âm lần 1/$minRecordings..."
+        
+        fun recordNext() {
+            if (currentRecording >= minRecordings) {
+                // Đã ghi đủ, bắt đầu train
+                resultTextView.text = "Đang train model cho user: $userName\nVui lòng đợi..."
+                
+                Thread {
+                    val result = voiceService.trainUser(userName, recordings)
+                    
+                    runOnUiThread {
+                        trainButton.isEnabled = true
+                        
+                        if (result.success) {
+                            resultTextView.text = """
+                                ✅ Thêm user thành công!
+                                
+                                User: $userName
+                                ${result.message}
+                                
+                                Bạn có thể thử nhận diện ngay bây giờ
+                            """.trimIndent()
+                            
+                            Toast.makeText(this, "Thêm user thành công!", Toast.LENGTH_SHORT).show()
+                            
+                            // Xóa các file recording tạm
+                            voiceService.cleanupTempFiles(recordings)
+                        } else {
+                            resultTextView.text = """
+                                ❌ Thêm user thất bại
+                                
+                                ${result.message}
+                                
+                                Vui lòng thử lại
+                            """.trimIndent()
+                            
+                            Toast.makeText(this, "Thêm user thất bại: ${result.message}", Toast.LENGTH_LONG).show()
+                            
+                            // Xóa các file recording tạm
+                            voiceService.cleanupTempFiles(recordings)
+                        }
+                    }
+                }.start()
+                return
+            }
+            
+            currentRecording++
+            resultTextView.text = "Đang ghi âm lần $currentRecording/$minRecordings...\nVui lòng nói rõ ràng"
+            
+            Thread {
+                val filePath = voiceService.recordAudio(
+                    durationSeconds = 3,
+                    fileName = "train_${userName}_$currentRecording"
+                )
+                
+                runOnUiThread {
+                    if (filePath != null) {
+                        recordings.add(filePath)
+                        resultTextView.text = "✅ Đã ghi âm lần $currentRecording/$minRecordings\n\n"
+                        
+                        if (currentRecording < minRecordings) {
+                            resultTextView.append("Chuẩn bị ghi âm lần ${currentRecording + 1}/$minRecordings...\nĐợi 2 giây...")
+                            
+                            // Đợi 2 giây trước khi ghi âm lần tiếp theo (sử dụng Handler)
+                            resultTextView.postDelayed({
+                                recordNext()
+                            }, 2000)
+                        } else {
+                            recordNext() // Train model
+                        }
+                    } else {
+                        trainButton.isEnabled = true
+                        resultTextView.text = """
+                            ❌ Lỗi ghi âm lần $currentRecording
+                            
+                            Vui lòng thử lại
+                        """.trimIndent()
+                        
+                        Toast.makeText(this, "Lỗi ghi âm, vui lòng thử lại", Toast.LENGTH_SHORT).show()
+                        
+                        // Xóa các file đã ghi
+                        voiceService.cleanupTempFiles(recordings)
+                    }
+                }
+            }.start()
+        }
+        
+        // Bắt đầu ghi âm lần đầu
+        recordNext()
+    }
+    
+    /**
      * Xử lý kết quả yêu cầu quyền
      */
     override fun onRequestPermissionsResult(
@@ -156,7 +288,8 @@ class VoiceAuthActivity : AppCompatActivity() {
         
         if (requestCode == RECORD_AUDIO_PERMISSION) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                recognizeVoice()
+                // User có thể đã click recognize hoặc train button
+                // Không tự động gọi để tránh confusion
             } else {
                 Toast.makeText(
                     this,

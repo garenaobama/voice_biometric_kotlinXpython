@@ -163,6 +163,61 @@ class VoiceBiometricService(private val context: Context) {
             )
         }
     }
+    
+    /**
+     * Ghi âm giọng nói và lưu ra file, dùng cho quá trình training
+     * @param durationSeconds Thời gian ghi âm (giây)
+     * @param fileName Tên file (không cần đuôi, sẽ tự thêm .wav)
+     * @return Đường dẫn tuyệt đối tới file ghi âm, hoặc null nếu lỗi
+     */
+    fun recordAudio(durationSeconds: Int = 3, fileName: String): String? {
+        val outputFile = File(context.getExternalFilesDir(null), "$fileName.wav")
+        
+        return try {
+            val recorder = MediaRecorder().apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
+                setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
+                setOutputFile(outputFile.absolutePath)
+                prepare()
+                start()
+            }
+            
+            // Ghi âm trong khoảng thời gian yêu cầu
+            Thread.sleep(durationSeconds * 1000L)
+            
+            recorder.apply {
+                stop()
+                release()
+            }
+            
+            outputFile.absolutePath
+        } catch (e: Exception) {
+            try {
+                if (outputFile.exists()) {
+                    outputFile.delete()
+                }
+            } catch (_: Exception) {
+            }
+            null
+        }
+    }
+    
+    /**
+     * Xóa các file ghi âm tạm sau khi train / nhận diện xong
+     */
+    fun cleanupTempFiles(files: List<String>) {
+        files.forEach { path ->
+            try {
+                val f = File(path)
+                if (f.exists()) {
+                    f.delete()
+                }
+            } catch (_: Exception) {
+                // Bỏ qua lỗi xóa file
+            }
+        }
+    }
 }
 
 /**
