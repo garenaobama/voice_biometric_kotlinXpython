@@ -1,134 +1,127 @@
 ## VoiceAuthenticatorxPython · Voice Biometric Authentication on Android with Python (Chaquopy)
 
-VoiceAuthenticatorxPython là một bộ mã mẫu hoàn chỉnh giúp bạn:
+VoiceAuthenticatorxPython is a complete sample project that shows how to:
 
-- **Train & nhận diện giọng nói (voice biometrics) trên Android**, sử dụng:
-  - **Python + scikit-learn + GMM** cho phần xử lý voice biometric.
-  - **Chaquopy** để nhúng Python trực tiếp vào Android app (Kotlin).
-- **Quản lý user bằng giọng nói**:
-  - Thêm user mới (train bằng nhiều file ghi âm).
-  - Nhận diện / xác thực user theo giọng nói.
-  - Liệt kê & **xóa user** (đã được implement).
-  - Phát hiện **“người lạ”** (stranger / imposter) không thuộc database.
+- **Train & recognize speaker identity (voice biometrics) on Android**, using:
+  - **Python + scikit-learn + GMM** for the biometric logic.
+  - **Chaquopy** to embed Python directly in an Android (Kotlin) app.
+- **Manage users by voice**:
+  - Enroll new users (train with multiple recordings).
+  - Recognize / authenticate users by voice.
+  - List & **delete users** (implemented).
+  - Detect **strangers / imposters** who are not in the enrolled database.
 
-Repo này mang tính chất **demo chất lượng cao**: code đã được chỉnh sửa để chạy thực tế trên Android, có xử lý permission, ghi âm WAV chuẩn, logging chi tiết và các cơ chế bảo mật cơ bản cho voice biometrics.
+This repo is a **production‑style demo**: the code has been adapted to run on real Android devices, handling permissions, proper WAV recording, detailed logging, and basic security mechanisms for voice biometrics.
 
 ---
 
-## 1. Kiến trúc tổng thể
+## 1. Architecture Overview
 
-### 1.1. Các thành phần chính
+### 1.1. Main components
 
-- **Android app (Kotlin)** – thư mục `app/`
+- **Android app (Kotlin)** – folder `app/`
+  - `VoiceAuthActivity.kt`: main UI Activity:
+    - Record and recognize voice (voice login).
+    - Train new users with multiple recordings.
+    - List users and delete selected users.
+  - `VoiceBiometricService.kt`: service layer between Android and Python:
+    - Records audio using `AudioRecord` (16‑bit PCM, mono, 16 kHz).
+    - Writes valid WAV files (manual WAV header).
+    - Calls Python functions via Chaquopy.
 
-  - `VoiceAuthActivity.kt`: Activity UI chính để:
-    - Ghi âm và nhận diện giọng nói (login bằng voice).
-    - Train user mới với nhiều lần ghi âm.
-    - Liệt kê users + xóa user.
-  - `VoiceBiometricService.kt`: lớp service trung gian:
-    - Ghi âm audio bằng `AudioRecord` (PCM 16-bit, mono, 16 kHz).
-    - Lưu file WAV hợp chuẩn (tự viết WAV header).
-    - Gọi các hàm Python qua Chaquopy.
+- **Python voice biometric core** – folder `app/src/main/python/`
+  - `android_api.py`: Android‑facing Python API:
+    - `train_user_voice(name, wav_files_list)`: train a GMM and save `.gmm` model.
+    - `recognize_voice_from_file(wav_file_path)`: recognize from a WAV file.
+    - `get_all_users()`: list users (based on `.gmm` files).
+    - `delete_user(name)`: delete the corresponding `.gmm` model.
+    - Manages **model paths** in Android internal storage.
+    - Includes **detailed DEBUG logging** (via `python.stdout` in Logcat).
+  - `main_functions.py`: feature extraction:
+    - Extracts MFCC + delta MFCC using `python_speech_features`.
+    - Normalizes features with `sklearn.preprocessing`.
+    - Face Recognition / TensorFlow is wrapped in `try/except` to avoid crashes on Android when TF is missing.
 
-- **Python voice biometric core** – thư mục `app/src/main/python/`
+- **Original docs & examples** – folder `voice_biometric/`
+  - `README.md`: original (desktop) voice biometrics documentation.
+  - `QUICK_START_ANDROID.md`: Android quick‑start guide.
+  - `ANDROID_INTEGRATION.md`: detailed Android integration guide.
+  - `android_example/`: original Android sample (for reference).
 
-  - `android_api.py`: API wrapper cho Android:
-    - `train_user_voice(name, wav_files_list)`: train GMM và lưu model `.gmm`.
-    - `recognize_voice_from_file(wav_file_path)`: nhận diện từ file WAV.
-    - `get_all_users()`: liệt kê users (theo tên file `.gmm`).
-    - `delete_user(name)`: xóa model `.gmm` tương ứng.
-    - Quản lý **đường dẫn models** trong internal storage của Android.
-    - Có **logging DEBUG chi tiết** (python.stdout trong Logcat).
-  - `main_functions.py`: xử lý feature:
-    - Trích xuất MFCC + delta MFCC bằng `python_speech_features`.
-    - Chuẩn hóa bằng `sklearn.preprocessing`.
-    - (Phần Face Recognition/TensorFlow được bọc `try/except` để không làm crash trên Android).
+### 1.2. Processing flow
 
-- **Tài liệu & ví dụ gốc** – thư mục `voice_biometric/`
-  - `README.md`: tài liệu gốc của project voice biometric (desktop).
-  - `QUICK_START_ANDROID.md`: hướng dẫn nhanh tích hợp Android.
-  - `ANDROID_INTEGRATION.md`: hướng dẫn chi tiết từng bước.
-  - `android_example/`: ví dụ Android ban đầu (tham khảo).
-
-### 1.2. Dòng chảy dữ liệu (flow)
-
-1. Người dùng bấm **“Thêm User”**:
-   - `VoiceAuthActivity` mở dialog nhập tên user.
-   - Sau đó gọi `startTrainingFlow(userName)` → ghi âm **3 lần** bằng `VoiceBiometricService.recordAudio`.
-   - Sau khi đủ samples, gọi `voiceService.trainUser(userName, recordings)`.
-2. Trong `VoiceBiometricService.trainUser`:
-   - Service khởi động Python (Chaquopy) nếu chưa khởi động.
-   - Gọi Python `android_api.train_user_voice(name, wavFiles)`.
+1. User taps **“Add User”**:
+   - `VoiceAuthActivity` opens a dialog to input the username.
+   - Calls `startTrainingFlow(userName)` → records **3 times** via `VoiceBiometricService.recordAudio`.
+   - When enough samples are collected, calls `voiceService.trainUser(userName, recordings)`.
+2. In `VoiceBiometricService.trainUser`:
+   - The service starts Python (Chaquopy) if it’s not started.
+   - Calls Python `android_api.train_user_voice(name, wavFiles)`.
    - Python:
-     - Đọc từng file WAV bằng `scipy.io.wavfile.read`.
-     - Trích xuất MFCC + delta features.
-     - Train **Gaussian Mixture Model (GMM)** bằng `sklearn.mixture.GaussianMixture`.
-     - Lưu model `.gmm` vào `internal storage` tại:
+     - Reads each WAV file using `scipy.io.wavfile.read`.
+     - Extracts MFCC + delta features.
+     - Trains a **Gaussian Mixture Model (GMM)** using `sklearn.mixture.GaussianMixture`.
+     - Saves the `.gmm` model into internal storage at:
        - `/data/data/com.rhino.voiceauthenticatorxpython/files/gmm_models/<user>.gmm`.
-3. Người dùng bấm **“Nhận diện”**:
-   - App ghi âm 1 file `temp_recording.wav`.
-   - Gọi `voiceService.recordAndRecognize(durationSeconds = 3)`.
-   - Service gọi `android_api.recognize_voice_from_file`.
+3. User taps **“Recognize Voice”**:
+   - App records a `temp_recording.wav` file.
+   - Calls `voiceService.recordAndRecognize(durationSeconds = 3)`.
+   - The service calls `android_api.recognize_voice_from_file`.
    - Python:
-     - Nạp tất cả `.gmm` trong thư mục `gmm_models`.
-     - Tính log-likelihood trung bình của audio trên từng model.
-     - Chọn model có score cao nhất.
-     - Áp dụng **threshold chặn người lạ**.
-4. Kết quả được trả về dưới dạng `RecognitionResult` (Kotlin) với:
+     - Loads all `.gmm` models from the `gmm_models` directory.
+     - Computes average log‑likelihood for the input audio under each model.
+     - Picks the model with the highest score.
+     - Applies a **stranger threshold** to reject unknown speakers.
+4. Result is returned as `RecognitionResult` (Kotlin) with:
    - `success`, `identity`, `confidence`, `message`.
 
 ---
 
-## 2. Tính năng đã triển khai
+## 2. Implemented Features
 
-- **Nhận diện giọng nói (Voice Authentication)**:
+- **Voice Authentication**:
+  - Record using `AudioRecord` → valid WAV file.
+  - Recognize enrolled users via GMM models.
+  - Shows:
+    - Recognized username.
+    - Confidence (as percentage).
+    - Detailed message from Python.
 
-  - Ghi âm bằng `AudioRecord` → file WAV chuẩn.
-  - Nhận diện user dựa trên GMM.
-  - Hiển thị:
-    - Tên user nhận diện.
-    - Độ tin cậy (%).
-    - Thông điệp chi tiết.
-
-- **Train User mới**:
-
-  - Ghi âm **ít nhất 3 mẫu** giọng nói cho mỗi user.
-  - Train GMM với:
+- **User Enrollment (Training)**:
+  - Records **at least 3 samples** per user.
+  - Trains a GMM with:
     - `n_components = 32`.
     - `covariance_type = 'diag'`.
     - `max_iter = 100`.
-  - Lưu model `.gmm` trong internal storage an toàn.
+  - Saves `.gmm` models into Android internal storage.
 
-- **Danh sách Users**:
+- **User Listing**:
+  - Fetches all users (by `.gmm` filenames).
+  - Shows them in an `AlertDialog` where you can choose a user.
 
-  - Lấy danh sách tất cả users (tên file `.gmm`).
-  - Hiển thị trong `AlertDialog` để chọn hành động.
+- **Delete User**:
+  - Select a user from the dialog.
+  - Confirm, then **delete the `.gmm` file** in `gmm_models`.
+  - Updates UI and shows toast + status message.
 
-- **Xóa User (Delete User)**:
+- **Stranger Detection**:
+  - Uses an **`AUTH_THRESHOLD`** on average log‑likelihood:
+    - If best score is below threshold → treat as **stranger** and reject auth.
+  - Prevents mapping an unknown speaker to the closest enrolled model.
 
-  - Chọn user trong dialog danh sách.
-  - Xác nhận, rồi **xóa file `.gmm`** tương ứng trong `gmm_models`.
-  - Cập nhật UI và phản hồi toast + message chi tiết.
-
-- **Phát hiện Người Lạ (Stranger Detection)**:
-
-  - Dùng ngưỡng **`AUTH_THRESHOLD`** trên log-likelihood trung bình:
-    - Nếu score thấp hơn threshold → coi là **stranger**, từ chối xác thực.
-  - Tránh trường hợp người lạ bị gán nhầm vào user gần nhất.
-
-- **Logging chi tiết**:
-  - Python (`android_api.py`) in `DEBUG:` ra `python.stdout` trong Logcat:
-    - Đường dẫn model path.
-    - Số lượng models.
-    - Score từng user.
-    - Quyết định final (best, confidence, reject stranger).
-  - Kotlin (`VoiceBiometricService.kt`) log:
-    - Ghi âm WAV (bắt đầu/kết thúc, kích thước file).
-    - Kết quả train / recognize / delete / list users.
+- **Detailed Logging**:
+  - Python (`android_api.py`) logs `DEBUG:` messages via `python.stdout` in Logcat:
+    - Model path.
+    - Number of models.
+    - Score for each user.
+    - Final decision (best, confidence, stranger rejected or not).
+  - Kotlin (`VoiceBiometricService.kt`) logs:
+    - WAV recording start/finish and file size.
+    - Results of train / recognize / delete / list operations.
 
 ---
 
-## 3. Cấu trúc thư mục
+## 3. Project Structure
 
 ```text
 VoiceAuthenticatorxPython/
@@ -136,11 +129,11 @@ VoiceAuthenticatorxPython/
 │  ├─ src/
 │  │  ├─ main/
 │  │  │  ├─ java/com/rhino/voiceauthenticatorxpython/
-│  │  │  │  ├─ VoiceAuthActivity.kt         # Activity UI chính
-│  │  │  │  └─ VoiceBiometricService.kt     # Service gọi Python + ghi âm WAV
+│  │  │  │  ├─ VoiceAuthActivity.kt         # Main Activity
+│  │  │  │  └─ VoiceBiometricService.kt     # Service to call Python + record WAV
 │  │  │  ├─ python/
-│  │  │  │  ├─ android_api.py              # API Python cho Android
-│  │  │  │  └─ main_functions.py           # Hàm extract_features (MFCC)
+│  │  │  │  ├─ android_api.py               # Python API for Android
+│  │  │  │  └─ main_functions.py            # MFCC & feature extraction
 │  │  │  └─ res/layout/activity_voice_auth.xml
 │  │  └─ ...
 │  └─ build.gradle (module)
@@ -151,23 +144,23 @@ VoiceAuthenticatorxPython/
 │  └─ android_example/
 │     ├─ README_ANDROID.md
 │     └─ ...
-└─ README.md (file bạn đang đọc)
+└─ README.md (this file)
 ```
 
 ---
 
-## 4. Chuẩn bị môi trường
+## 4. Environment Setup
 
-### 4.1. Yêu cầu
+### 4.1. Requirements
 
-- **Android Studio** mới (Arctic Fox trở lên).
-- **Python 3.x** trên máy để Chaquopy có thể build dependencies.
-- Thiết bị hoặc emulator Android:
-  - Nên là **thiết bị thật** để mic hoạt động ổn định.
+- Recent **Android Studio** (Arctic Fox or newer).
+- **Python 3.x** installed so Chaquopy can build Python dependencies.
+- Android device or emulator:
+  - Prefer a **real device** for stable microphone input.
 
 ### 4.2. Chaquopy & Python dependencies
 
-Trong `app/build.gradle` (module), phần cấu hình Chaquopy nên tương tự:
+In `app/build.gradle` (module), Chaquopy configuration should look like:
 
 ```gradle
 plugins {
@@ -195,105 +188,102 @@ python {
 }
 ```
 
-> Lưu ý: Version thực tế có thể khác tuỳ môi trường; nên giữ `numpy/scipy` tương thích với Chaquopy.
+> Note: Versions may vary; keep `numpy/scipy` compatible with Chaquopy’s supported versions.
 
 ---
 
-## 5. Cách build & chạy
+## 5. Build & Run
 
-1. **Clone repo**:
+1. **Clone the repo**:
 
 ```bash
 git clone <YOUR_REPO_URL>
 cd VoiceAuthenticatorxPython
 ```
 
-2. **Mở bằng Android Studio**:
-
-   - `File → Open...` → chọn thư mục repo.
+2. **Open in Android Studio**:
+   - `File → Open...` → select the repo folder.
 
 3. **Sync Gradle**:
+   - Android Studio will sync; if Chaquopy complains about Python, adjust `buildPython`.
 
-   - Android Studio sẽ tự động sync; nếu Chaquopy thiếu Python, chỉnh lại `buildPython`.
+4. **Run the app**:
+   - Connect a real device (USB / ADB).
+   - Select module `app`, press Run.
 
-4. **Chạy app**:
-
-   - Kết nối thiết bị thật (USB / ADB).
-   - Chọn module `app`, bấm Run.
-
-5. **Cấp quyền**:
-   - Lần đầu chạy, app sẽ yêu cầu quyền `RECORD_AUDIO`.
-   - Bạn phải **Allow** để sử dụng voice biometric.
+5. **Grant permissions**:
+   - On first run, the app will request `RECORD_AUDIO` permission.
+   - You must **Allow** it to use voice biometrics.
 
 ---
 
-## 6. Hướng dẫn sử dụng trong app
+## 6. In‑App Usage Guide
 
-### 6.1. Thêm user mới (Train)
+### 6.1. Enroll a new user (Train)
 
-1. Mở app `VoiceAuthenticatorxPython`.
-2. Bấm **“Thêm User”**.
-3. Nhập tên user (ví dụ: `nam`, `phuong`):
-   - Không để trống.
-   - Không dùng từ khóa `"unknown"`.
-4. App sẽ:
-   - Ghi âm 3 lần, mỗi lần 3 giây.
-   - Hiển thị trạng thái từng lần ghi.
-   - Train GMM model từ 3 mẫu ghi.
-5. Sau khi xong:
-   - Model `.gmm` được lưu.
-   - UI báo **Thêm user thành công**.
+1. Open the `VoiceAuthenticatorxPython` app.
+2. Tap **“Add User”**.
+3. Enter username (e.g. `nam`, `phuong`):
+   - Must not be empty.
+   - Must not be `"unknown"`.
+4. The app will:
+   - Record 3 times, ~3 seconds each.
+   - Show status for each recording.
+   - Train a GMM model from these 3 samples.
+5. After training:
+   - The `.gmm` model is saved.
+   - UI shows **User added successfully**.
 
-### 6.2. Liệt kê & xóa users
+### 6.2. List & delete users
 
-1. Bấm **“Danh sách Users”**.
-2. App sẽ:
-   - Gọi Python `get_all_users`.
-   - Hiển thị dialog list user (mỗi dòng là 1 tên).
-3. Bấm vào tên user:
-   - App hiển thị dialog xác nhận Xóa User.
-4. Xác nhận:
-   - Gọi `deleteUser(name)` → Python xoá file `.gmm`.
-   - UI báo kết quả + có thể load lại danh sách.
+1. Tap **“List Users”**.
+2. The app will:
+   - Call Python `get_all_users`.
+   - Show a dialog with the usernames.
+3. Tap on a username:
+   - The app shows a confirmation dialog to delete that user.
+4. Confirm:
+   - Calls `deleteUser(name)` → Python deletes the `.gmm` file.
+   - UI shows the result and you can refresh the list if needed.
 
-### 6.3. Nhận diện / Xác thực người dùng
+### 6.3. Recognize / authenticate users
 
-1. Bấm **“Nhận Diện Giọng Nói”**.
-2. App ghi âm ~3 giây:
-   - Text: “Đang ghi âm và nhận diện… Vui lòng nói tên của bạn”.
-3. Service gọi Python:
-   - Load tất cả GMM models.
-   - Tính score cho từng model.
-4. Python trả về:
-   - Nếu score tốt và vượt threshold:
-     - `success = true`, `identity = tên user`, `confidence ≈ 0.8–1.0`.
-   - Nếu không:
-     - `success = false`, `identity = None hoặc "Unknown"`, `confidence thấp`.
-5. UI hiển thị:
-   - “✅ Nhận diện thành công” hoặc “❌ Nhận diện thất bại”.
-   - Độ tin cậy dưới dạng phần trăm.
+1. Tap **“Recognize Voice”**.
+2. The app records ~3 seconds:
+   - Text: “Recording and recognizing… Please say your name”.
+3. The service calls Python:
+   - Loads all GMM models.
+   - Computes a score for each model.
+4. Python returns:
+   - If score is good and above threshold:
+     - `success = true`, `identity = username`, `confidence ≈ 0.8–1.0`.
+   - Otherwise:
+     - `success = false`, `identity = None or "Unknown"`, low `confidence`.
+5. UI shows:
+   - “✅ Recognized successfully” or “❌ Recognition failed”.
+   - Confidence as percentage.
 
 ---
 
-## 7. Chi tiết kỹ thuật voice biometric
+## 7. Voice Biometric Technical Details
 
-### 7.1. Trích xuất đặc trưng (Features)
+### 7.1. Feature Extraction (MFCC)
 
-Trong `main_functions.py`:
+In `main_functions.py`:
 
 - **MFCC**:
   - `mfcc.mfcc(audio, rate, 0.025, 0.01, 20, appendEnergy=True, nfft=1103)`
-  - Window 25ms, step 10ms, 20 hệ số MFCC.
-- **Chuẩn hóa**:
-  - `preprocessing.scale(mfcc_feat)` → zero-mean, unit-variance.
+  - 25 ms window, 10 ms step, 20 MFCC coefficients.
+- **Normalization**:
+  - `preprocessing.scale(mfcc_feat)` → zero‑mean, unit‑variance.
 - **Delta MFCC**:
-  - `calculate_delta(mfcc_feat)` → đạo hàm bậc nhất.
+  - `calculate_delta(mfcc_feat)` → first‑order derivative.
 - **Feature vector**:
-  - `combined = np.hstack((mfcc_feat, delta))` → 40-dim per frame.
+  - `combined = np.hstack((mfcc_feat, delta))` → 40‑dimensional vector per frame.
 
 ### 7.2. GMM Training
 
-Trong `android_api.py`:
+In `android_api.py`:
 
 ```python
 gmm = GaussianMixture(
@@ -306,99 +296,93 @@ gmm.fit(features)
 pickle.dump(gmm, open(model_file, 'wb'))
 ```
 
-- Mỗi user có 1 GMM model riêng.
-- Sử dụng covariance dạng `diag` để tối ưu tốc độ.
+– Each user has a separate GMM model.  
+– Uses `diag` covariance to optimize speed on mobile.
 
 ### 7.3. Scoring & Confidence
 
-Nhận diện:
+Recognition:
 
 ```python
 avg_score = gmm.score(vector)  # average log-likelihood per frame
 ```
 
-- Tính `avg_score` cho từng user.
-- Chọn user có `avg_score` lớn nhất (`best_score`).
+– Compute `avg_score` for each user.  
+– Select the user with highest `avg_score` (`best_score`).
 
 **Stranger detection (AUTH_THRESHOLD)**:
 
 ```python
 AUTH_THRESHOLD = -40.0
 if best_score < AUTH_THRESHOLD:
-    # coi là người lạ, reject
+    # treat as stranger and reject
 ```
 
-**Confidence tương đối**:
+**Relative confidence**:
 
 ```python
 max_score = best_score
 min_score = np.min(log_likelihood)
 denom = max_score + abs(min_score) or 1e-10
-confidence = (max_score - min_score) / denom  # nếu có >= 2 user
+confidence = (max_score - min_score) / denom  # when >= 2 users
 ```
 
-- Khi chỉ có 1 user, confidence được set cao sau khi vượt threshold.
+– When there is only one user, confidence is forced high once the score passes the threshold.
 
 ---
 
-## 8. Troubleshooting (Lỗi thường gặp)
+## 8. Troubleshooting
 
-- **Lỗi: `File format ... not understood. Only 'RIFF' and 'RIFX' supported.`**
+- **Error: `File format ... not understood. Only 'RIFF' and 'RIFX' supported.`**
+  - Cause: recorded with `MediaRecorder` in 3GP/AMR format → not WAV.
+  - Fix: this repo uses `AudioRecord` + manual WAV header, so recordings are valid WAV files.
 
-  - Nguyên nhân: Ghi âm bằng `MediaRecorder` với định dạng 3GP/AMR → không phải WAV.
-  - Fix: Ở repo này đã chuyển sang `AudioRecord` + ghi header WAV thủ công.
-
-- **Lỗi: Không thấy user trong danh sách dù train thành công**
-
-  - Kiểm tra log:
+- **Error: User not shown in list after training success**
+  - Check logs:
     - Python log: `Saved model to /data/data/.../gmm_models/user.gmm`.
-    - Nếu `get_all_users` dùng path khác, đã được fix bằng `get_model_path()` trả về internal storage cố định.
+    - If `get_all_users` reads another path, this has been fixed by using a stable `get_model_path()` in internal storage.
 
-- **Lỗi: `ImportError: cannot import name 'GMM' from 'sklearn.mixture'`**
+- **Error: `ImportError: cannot import name 'GMM' from 'sklearn.mixture'`**
+  - Fixed by migrating to `GaussianMixture` (modern scikit‑learn API).
 
-  - Đã được fix bằng cách dùng `GaussianMixture` (API mới).
+- **Error: `No module named 'tensorflow'`**
+  - Face Recognition code is wrapped in `try/except` in `main_functions.py`, so lack of TF simply disables that part instead of crashing.
 
-- **Lỗi: `No module named 'tensorflow'`**
-
-  - Đã được bọc `try/except` trong `main_functions.py` để vô hiệu hóa phần Face Recognition khi thiếu TensorFlow.
-
-- **Nhận diện sai / không ổn định**
-  - Thu thêm nhiều mẫu train hơn (3–5 lần).
-  - Ghi âm trong môi trường ít ồn, mic ổn định.
-  - Điều chỉnh `AUTH_THRESHOLD` (ví dụ -45, -35) cho phù hợp dữ liệu thực tế.
+- **Poor or unstable recognition**
+  - Collect more training samples per user (3–5 or more).
+  - Record in a quieter environment with a consistent mic distance.
+  - Tune `AUTH_THRESHOLD` (e.g. -45, -35) based on real‑world data.
 
 ---
 
-## 9. Roadmap / Ý tưởng phát triển thêm
+## 9. Roadmap / Ideas
 
-- **UI/UX đẹp hơn**:
+- **Better UI/UX**:
+  - Material Design styling, progress bars during train/recognize.
+  - Voice login history / audit trail screen.
 
-  - Dùng Material Design, ProgressBar khi train/recognize.
-  - Hiển thị lịch sử đăng nhập bằng giọng nói.
-
-- **Multi-session training**:
-
-  - Cho phép bổ sung thêm mẫu giọng nói cho user đã tồn tại (incremental training).
+- **Multi‑session training**:
+  - Allow adding additional recordings to existing users (incremental training).
 
 - **Model export / import**:
+  - Sync `.gmm` models to a backend service or between devices.
 
-  - Đồng bộ `.gmm` models lên server hoặc giữa nhiều thiết bị.
+- **Two‑factor auth (2FA)**:
+  - Voice + PIN, or Voice + Face Recognition.
 
-- **Kết hợp 2 yếu tố (2FA)**:
-
-  - Voice + PIN hoặc Voice + Face Recognition.
-
-- **Thử nghiệm các thuật toán khác**:
-  - i-vector, x-vector, d-vector, hoặc embedding từ mô hình Deep Learning mới hơn.
+- **Try other algorithms**:
+  - i‑vector, x‑vector, d‑vector, or modern deep‑learning speaker embeddings.
 
 ---
 
-## 10. Đóng góp (Contributing)
+## 10. Contributing
 
-Pull Request / Issues rất được hoan nghênh:
+Pull Requests / Issues are very welcome:
 
-- Thêm test tự động cho phần Python (unit test trên desktop).
-- Cải thiện UX trong `VoiceAuthActivity`.
-- Tối ưu hiệu năng (giảm thời gian load models, caching…).
+- Add desktop unit tests for the Python voice biometric logic.
+- Improve UX inside `VoiceAuthActivity` and the overall app flow.
+- Optimize performance (faster model loading, caching strategies, etc.).
 
-Nếu bạn build được một POC hoặc sản phẩm thực tế từ repo này, rất mong bạn chia sẻ lại để repo tiếp tục được cải thiện 🎯
+If you build a PoC or a production app on top of this repo, please consider sharing back so the project can keep evolving 🎯
+
+
