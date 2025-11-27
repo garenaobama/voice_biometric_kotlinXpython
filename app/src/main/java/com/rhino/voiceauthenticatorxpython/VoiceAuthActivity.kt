@@ -119,11 +119,64 @@ class VoiceAuthActivity : AppCompatActivity() {
                     if (result.users.isEmpty()) {
                         resultTextView.text = "Database trống. Chưa có user nào."
                     } else {
-                        val usersText = result.users.joinToString("\n", "Danh sách users:\n\n")
-                        resultTextView.text = usersText
+                        // Hiển thị dialog danh sách users để có thể xóa
+                        showUserListDialog(result.users)
+                        resultTextView.text = "Đang hiển thị danh sách ${result.users.size} users..."
                     }
                 } else {
                     resultTextView.text = "Lỗi: ${result.message}"
+                }
+            }
+        }.start()
+    }
+
+    /**
+     * Hiển thị dialog danh sách users với tùy chọn xóa
+     */
+    private fun showUserListDialog(users: List<String>) {
+        val userArray = users.toTypedArray()
+        
+        AlertDialog.Builder(this)
+            .setTitle("Danh sách Users")
+            .setItems(userArray) { dialog, which ->
+                val selectedUser = userArray[which]
+                showDeleteConfirmDialog(selectedUser)
+            }
+            .setNegativeButton("Đóng", null)
+            .show()
+    }
+
+    /**
+     * Hiển thị dialog xác nhận xóa user
+     */
+    private fun showDeleteConfirmDialog(userName: String) {
+        AlertDialog.Builder(this)
+            .setTitle("Xóa User")
+            .setMessage("Bạn có chắc chắn muốn xóa user '$userName' không?")
+            .setPositiveButton("Xóa") { _, _ ->
+                deleteUser(userName)
+            }
+            .setNegativeButton("Hủy", null)
+            .show()
+    }
+
+    /**
+     * Thực hiện xóa user
+     */
+    private fun deleteUser(userName: String) {
+        resultTextView.text = "Đang xóa user $userName..."
+        
+        Thread {
+            val result = voiceService.deleteUser(userName)
+            
+            runOnUiThread {
+                if (result.success) {
+                    resultTextView.text = "✅ Đã xóa user $userName thành công!"
+                    Toast.makeText(this, "Đã xóa $userName", Toast.LENGTH_SHORT).show()
+                    // Refresh list nếu cần (optional)
+                } else {
+                    resultTextView.text = "❌ Lỗi xóa user: ${result.message}"
+                    Toast.makeText(this, "Lỗi xóa: ${result.message}", Toast.LENGTH_SHORT).show()
                 }
             }
         }.start()

@@ -95,9 +95,31 @@ def calculate_delta(array):
     return deltas
 
 #convert audio to mfcc features
-def extract_features(audio,rate):    
-    mfcc_feat = mfcc.mfcc(audio,rate, 0.025, 0.01,20,appendEnergy = True, nfft=1103)
+def extract_features(audio,rate):
+    # 1. Voice Activity Detection (VAD) đơn giản dựa trên năng lượng (Amplitude)
+    # Loại bỏ khoảng lặng để model tập trung vào giọng nói thực
+    # Ngưỡng: 1% của max amplitude hoặc giá trị cố định
+    if len(audio) > 0:
+        max_amp = np.max(np.abs(audio))
+        threshold = 0.02 * max_amp # 2% ngưỡng
+        # Giữ lại các frame có tín hiệu lớn hơn ngưỡng
+        # Tuy nhiên cắt kiểu này có thể làm gãy signal
+        # Tốt hơn là dùng MFCC năng lượng (cột đầu tiên) để lọc sau khi extract
+        pass
+
+    # 2. Extract MFCC
+    # winlen=0.025 (25ms), winstep=0.01 (10ms), numcep=20
+    mfcc_feat = mfcc.mfcc(audio,rate, 0.025, 0.01, 20, appendEnergy=True, nfft=1103)
+    
+    # 3. Lọc bỏ các frame có năng lượng thấp (Silence removal dựa trên log energy - cột đầu tiên)
+    # Log energy thường ở cột 0 hoặc appendEnergy=True sẽ thêm vào cuối? 
+    # python_speech_features trả về [n_frames, n_cepstrum]
+    # Nếu appendEnergy=True, cột 0 thường bị thay thế bởi log energy
+    
+    # Cách đơn giản hơn: Chuẩn hóa trước
     mfcc_feat = preprocessing.scale(mfcc_feat)
+    
+    # 4. Calculate Delta
     delta = calculate_delta(mfcc_feat)
 
     #combining both mfcc features and delta

@@ -148,7 +148,10 @@ def train_user_voice(name, wav_files_list, model_path=None):
         if features.size == 0:
             return {'success': False, 'message': 'Không có data audio hợp lệ'}
         
-        gmm = GaussianMixture(n_components=16, covariance_type='diag', max_iter=200, n_init=3)
+        # Tuning GMM parameters cho giọng nói ngắn (3s)
+        # n_components: Tăng lên 32 để mô hình hóa giọng nói chi tiết hơn
+        # max_iter: Giảm xuống 100 để tránh overfitting vào nhiễu nền
+        gmm = GaussianMixture(n_components=32, covariance_type='diag', max_iter=100, n_init=3)
         gmm.fit(features)
         
         pickle.dump(gmm, open(model_file, 'wb'))
