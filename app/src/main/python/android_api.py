@@ -44,6 +44,10 @@ def get_model_path():
         return os.path.join(os.path.dirname(os.path.abspath(__file__)), "gmm_models")
 
 def recognize_voice_from_file(wav_file_path, model_path=None):
+    # AUTH THRESHOLD: Điểm số log-likelihood trung bình (per frame)
+    # Nếu thấp hơn ngưỡng này, coi như là người lạ
+    AUTH_THRESHOLD = -40.0 
+
     try:
         if model_path is None:
             model_path = get_model_path()
@@ -69,26 +73,43 @@ def recognize_voice_from_file(wav_file_path, model_path=None):
         
         sr, audio = read(wav_file_path)
         vector = extract_features(audio, sr)
+        
+        # Log-likelihood cho từng model
         log_likelihood = np.zeros(len(models))
         
         for i in range(len(models)):
             gmm = models[i]
-            scores = np.array(gmm.score(vector))
-            log_likelihood[i] = scores.sum()
-            print(f"DEBUG: Score for {speakers[i]}: {log_likelihood[i]}")
+            # gmm.score trả về average log-likelihood per sample (frame)
+            # Đây là giá trị đã được chuẩn hóa theo độ dài, có thể so sánh với Threshold
+            avg_score = gmm.score(vector)
+            log_likelihood[i] = avg_score
+            print(f"DEBUG: Avg Score for {speakers[i]}: {avg_score}")
         
         pred = np.argmax(log_likelihood)
         identity = speakers[pred]
-        max_score = log_likelihood[pred]
+        best_score = log_likelihood[pred]
+        
+        # KIỂM TRA NGƯỠNG TUYỆT ĐỐI (STRANGER DETECTION)
+        if best_score < AUTH_THRESHOLD:
+            print(f"DEBUG: Rejected stranger. Best score {best_score} < {AUTH_THRESHOLD}")
+            return {
+                'success': False,
+                'identity': "Unknown",
+                'confidence': 0.0,
+                'message': f'Không nhận diện được (Người lạ, Score: {best_score:.2f})'
+            }
+
+        # Tính confidence tương đối (giữa các user đã đăng ký)
+        max_score = best_score
         min_score = np.min(log_likelihood)
         
         denom = max_score + abs(min_score)
         if denom == 0: denom = 1e-10
             
         # Nếu chỉ có 1 model, confidence luôn = 0 với công thức cũ.
-        # Fix: Nếu chỉ có 1 user, set confidence cao nếu score hợp lý
+        # Fix: Nếu chỉ có 1 user và đã qua được Threshold check, thì confidence cao
         if len(models) == 1:
-            confidence = 0.95 # Giả định là đúng nếu chỉ có 1 người và score tính được
+            confidence = 0.95 
         else:
             confidence = (max_score - min_score) / denom
             
